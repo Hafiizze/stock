@@ -1,1 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-gray-100 p-4">
 
+<div class="max-w-7xl mx-auto">
+<h1 class="text-2xl font-bold text-center mb-4">📊 Business Dashboard</h1>
+
+<div class="bg-white p-3 rounded mb-4 flex flex-col md:flex-row gap-2">
+  <input type="month" id="reportMonth" class="border p-2 flex-1">
+  <button onclick="exportExcel()" class="bg-green-600 text-white px-3 py-2 rounded">Excel</button>
+  <button onclick="exportPDF()" class="bg-red-600 text-white px-3 py-2 rounded">PDF</button>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-8 gap-2 mb-4 text-center">
+  <div class="bg-white p-2"><p>Products</p><b id="totalProducts">0</b></div>
+  <div class="bg-white p-2"><p>Stock</p><b id="totalValue">0</b></div>
+  <div class="bg-white p-2"><p>Sold</p><b id="totalSold">0</b></div>
+  <div class="bg-white p-2"><p>Trans</p><b id="totalTrans">0</b></div>
+  <div class="bg-white p-2"><p>Expense</p><b id="totalExpense">0</b></div>
+  <div class="bg-white p-2"><p>Profit</p><b id="profit">0</b></div>
+  <div class="bg-white p-2"><p>Total Cash</p><b id="totalCash">0</b></div>
+  <div class="bg-white p-2"><p>Total Credit</p><b id="totalCredit">0</b></div>
+</div>
+
+<div class="bg-white p-3 mb-4 rounded shadow">
+  <h2 class="font-bold mb-2">Add / Edit Product</h2>
+  <div class="flex flex-col md:flex-row gap-2">
+    <input id="name" placeholder="Name" class="border p-2 flex-1">
+    <input id="qty" type="number" placeholder="Qty" class="border p-2">
+    <input id="price" type="number" placeholder="Price" class="border p-2">
+    <button onclick="saveProduct()" class="bg-blue-500 text-white px-3 py-2">Save</button>
+  </div>
+</div>
+
+<div class="bg-white p-3 mb-4 rounded shadow">
+  <h2 class="font-bold mb-2">Stock IN / OUT</h2>
+  <div class="flex flex-col md:flex-row gap-2">
+    <select id="productSelect" class="border p-2 flex-1"></select>
+    <input id="transQty" type="number" placeholder="Qty" class="border p-2">
+    <select id="type" class="border p-2">
+      <option value="IN">IN</option>
+      <option value="OUT">OUT</option>
+    </select>
+    <input id="cash" type="number" placeholder="Cash" class="border p-2">
+    <input id="credit" type="number" placeholder="Credit" class="border p-2">
+    <button onclick="saveTransaction()" class="bg-green-500 text-white px-3 py-2">Apply</button>
+  </div>
+</div>
+
+<h2 class="font-bold mb-2">Transactions (IN / OUT)</h2>
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+<thead><tr><th>Product</th><th>Type</th><th>Cash</th><th>Credit</th><th>Qty</th><th>Price</th><th>Total</th><th>Date</th><th>Action</th></tr></thead>
+<tbody id="transactionTable"></tbody>
+</table>
+</div>
+
+<div class="bg-white p-3 mb-4 rounded shadow">
+  <h2 class="font-bold mb-2">Add Expense</h2>
+  <div class="flex flex-col md:flex-row gap-2">
+    <input id="expDesc" placeholder="Reason" class="border p-2 flex-1">
+    <input id="expAmount" type="number" placeholder="Amount" class="border p-2">
+    <input id="expPayBy" placeholder="Paid By" class="border p-2">
+    <button onclick="saveExpense()" class="bg-red-500 text-white px-3 py-2">Save</button>
+  </div>
+</div>
+
+<h2 class="font-bold mb-2">Expenses</h2>
+<div class="overflow-x-auto">
+<table class="w-full text-sm mb-4">
+<thead><tr><th>Reason</th><th>Amount</th><th>Paid By</th><th>Date</th><th>Action</th></tr></thead>
+<tbody id="expenseTable"></tbody>
+</table>
+</div>
+
+<h2 class="font-bold mb-2">Products</h2>
+<div class="overflow-x-auto">
+<table class="w-full text-sm">
+<thead><tr><th>Name</th><th>Qty</th><th>Price</th><th>Total</th><th>Action</th></tr></thead>
+<tbody id="productTable"></tbody>
+</table>
+</div>
+</div>
+
+<script>
+let products=[],transactions=[],expenses=[],totalSoldValue=0;
+let editProductIndex=null;
+let editTransactionIndex=null;
+let editExpenseIndex=null;
+
+function el(id){return document.getElementById(id);} 
+function getDate(){return new Date().toISOString().split('T')[0];}
+function getMonth(d){return d.slice(0,7);} 
+
+function saveData(){localStorage.setItem('data',JSON.stringify({products,transactions,expenses,totalSoldValue}));}
+function loadData(){let d=JSON.parse(localStorage.getItem('data'));if(d){products=d.products||[];transactions=d.transactions||[];expenses=d.expenses||[];totalSoldValue=d.totalSoldValue||0;}}
+
+function saveProduct(){
+  const name=el('name').value, qty=+el('qty').value, price=+el('price').value;
+  if(!name) return;
+
+  if(editProductIndex!=null){
+    products[editProductIndex]={name,qty,price};
+    editProductIndex=null;
+  } else {
+    products.push({name,qty,price});
+  }
+
+  el('name').value='';el('qty').value='';el('price').value='';saveData();render();
+}
+
+function editProduct(i){
+  const p=products[i];
+  el('name').value=p.name;
+  el('qty').value=p.qty;
+  el('price').value=p.price;
+  editProductIndex=i;
+}
+
+function deleteProduct(i){ products.splice(i,1); saveData(); render(); }
+
+function saveTransaction(){
+  const i=el('productSelect').value;
+  const q=+el('transQty').value;
+  const t=el('type').value;
+
+  let cash=0, credit=0;
+
+  if(i===''||!q) return alert('Fill all fields');
+
+  const p=products[i];
+  const total=q*p.price;
+
+  if(t==='OUT'){
+    cash=+el('cash').value||0;
+    credit=+el('credit').value||0;
+
+    if(cash + credit !== total){
+      alert('Cash + Credit must equal Total');
+      return;
+    }
+  }
+
+  if(editTransactionIndex!=null){
+    transactions[editTransactionIndex]={product:p.name,type:t,cash,credit,qty:q,price:p.price,total,date:getDate()};
+    editTransactionIndex=null;
+  } else {
+    transactions.push({product:p.name,type:t,cash,credit,qty:q,price:p.price,total,date:getDate()});
+  }
+
+  recalculateAll();
+
+  el('transQty').value=''; el('cash').value=''; el('credit').value='';
+  saveData(); render();
+}
+
+function editTransaction(i){
+  const t=transactions[i];
+  el('transQty').value=t.qty;
+  el('type').value=t.type;
+  el('cash').value=t.cash||0;
+  el('credit').value=t.credit||0;
+  const idx=products.findIndex(p=>p.name===t.product);
+  if(idx>-1) el('productSelect').value=idx;
+  editTransactionIndex=i;
+}
+
+function deleteTransaction(i){ 
+  transactions.splice(i,1); 
+  recalculateAll();
+  saveData(); 
+  render(); 
+}
+
+function saveExpense(){
+  const desc=el('expDesc').value, amount=+el('expAmount').value, payBy=el('expPayBy').value;
+  if(!desc) return;
+  if(editExpenseIndex!=null){ expenses[editExpenseIndex]={desc,amount,payBy,date:getDate()}; editExpenseIndex=null; }
+  else { expenses.push({desc,amount,payBy,date:getDate()}); }
+  el('expDesc').value=''; el('expAmount').value=''; el('expPayBy').value='';
+  saveData(); render();
+}
+
+function editExpense(i){ const e=expenses[i]; el('expDesc').value=e.desc; el('expAmount').value=e.amount; el('expPayBy').value=e.payBy; editExpenseIndex=i; }
+function deleteExpense(i){ expenses.splice(i,1); saveData(); render(); }
+
+function exportExcel(){
+  let m=el('reportMonth').value; if(!m) return alert('Select month');
+  let t=transactions.filter(x=>getMonth(x.date)===m);
+  let e=expenses.filter(x=>getMonth(x.date)===m);
+  let content="Transactions\nProduct,Type,Cash,Credit,Qty,Price,Total,Date\n";
+  t.forEach(x=>content+=`${x.product},${x.type},${x.cash||0},${x.credit||0},${x.qty},${x.price},${x.total},${x.date}\n`);
+  content+="\nExpenses\nReason,Amount,Paid By,Date\n";
+  e.forEach(x=>content+=`${x.desc},${x.amount},${x.payBy},${x.date}\n`);
+  let blob=new Blob([content],{type:"application/vnd.ms-excel"});
+  let link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download="report.xls"; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+}
+
+function exportPDF(){
+  if(!window.jspdf){ alert('PDF not loaded'); return; }
+  let doc=new window.jspdf.jsPDF();
+  let m=el('reportMonth').value; if(!m) return alert('Select month');
+  let t=transactions.filter(x=>getMonth(x.date)===m);
+  doc.text("Transactions Report",10,10);
+  doc.autoTable({ startY:20, head:[["Product","Type","Cash","Credit","Qty","Price","Total","Date"]], body:t.map(x=>[x.product,x.type,x.cash||0,x.credit||0,x.qty,x.price,x.total,x.date]) });
+  doc.save("report.pdf");
+}
+
+function recalculateAll(){
+  totalSoldValue = 0;
+  products.forEach(p=>p.qty=0);
+
+  transactions.forEach(t=>{
+    const p=products.find(x=>x.name===t.product);
+    if(!p) return;
+
+    if(t.type==='IN'){
+      p.qty += t.qty;
+    } else {
+      p.qty -= t.qty;
+      totalSoldValue += t.total;
+    }
+  });
+}
+
+function render(){
+  el('productSelect').innerHTML=''; el('transactionTable').innerHTML=''; el('expenseTable').innerHTML=''; el('productTable').innerHTML='';
+  let value=0,exp=0,cashTotal=0,creditTotal=0;
+
+  products.forEach((p,i)=>{
+    let total=p.qty*p.price; value+=total;
+    el('productSelect').innerHTML+=`<option value="${i}">${p.name}</option>`;
+    el('productTable').innerHTML+=`<tr>
+      <td>${p.name}</td>
+      <td>${p.qty}</td>
+      <td>${p.price}</td>
+      <td>${total}</td>
+      <td>
+        <button onclick="editProduct(${i})" class="bg-blue-500 text-white px-2 rounded">Edit</button>
+        <button onclick="deleteProduct(${i})" class="bg-red-500 text-white px-2 rounded">Delete</button>
+      </td>
+    </tr>`;
+  });
+
+  transactions.forEach((t,i)=>{
+    if(t.type==='OUT'){
+      cashTotal += t.cash||0;
+      creditTotal += t.credit||0;
+    }
+    el('transactionTable').innerHTML+=`<tr>
+      <td>${t.product}</td>
+      <td>${t.type}</td>
+      <td>${t.cash||0}</td>
+      <td>${t.credit||0}</td>
+      <td>${t.qty}</td>
+      <td>${t.price}</td>
+      <td>${t.total}</td>
+      <td>${t.date}</td>
+      <td>
+        <button onclick="editTransaction(${i})" class="bg-green-500 text-white px-2 rounded">Edit</button>
+        <button onclick="deleteTransaction(${i})" class="bg-red-500 text-white px-2 rounded">Delete</button>
+      </td>
+    </tr>`;
+  });
+
+  expenses.forEach((e,i)=>{
+    exp+=e.amount;
+    el('expenseTable').innerHTML+=`<tr>
+      <td>${e.desc}</td>
+      <td>${e.amount}</td>
+      <td>${e.payBy}</td>
+      <td>${e.date}</td>
+      <td>
+        <button onclick="editExpense(${i})" class="bg-yellow-500 text-white px-2 rounded">Edit</button>
+        <button onclick="deleteExpense(${i})" class="bg-red-500 text-white px-2 rounded">Delete</button>
+      </td>
+    </tr>`;
+  });
+
+  el('totalProducts').innerText=products.length;
+  el('totalValue').innerText=value;
+  el('totalSold').innerText=totalSoldValue;
+  el('totalTrans').innerText=transactions.length;
+  el('totalExpense').innerText=exp;
+  el('profit').innerText=cashTotal-exp;
+  el('totalCash').innerText=cashTotal;
+  el('totalCredit').innerText=creditTotal;
+}
+
+loadData(); render();
+</script>
+
+</body>
+</html>
